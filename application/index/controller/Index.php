@@ -3,6 +3,7 @@ namespace app\index\controller;
 
 use app\index\model\Message;
 use think\Request;
+use think\Log;
 
 class Index
 {
@@ -11,7 +12,17 @@ class Index
         if(Request::instance()->has('echostr')){
             return $this->verify();
         }else{
-            return $this->receivemsg();
+            $data = isset($GLOBALS['HTTP_RAW_POST_DATA']) ? $GLOBALS['HTTP_RAW_POST_DATA']:'';
+            if(empty($data)){
+                echo '';
+                exit;
+            }
+            $xml = simplexml_load_string($data);
+            //接收消息
+            if(isset($xml->MsgType) && isset($xml->MsgId)){
+                \app\index\api\Message::receive($xml->MsgType,$xml,1);
+            }
+
         }
     }
     //验签
@@ -32,17 +43,23 @@ class Index
     }
     //接收消息
     public function receivemsg(){
-        $data = $GLOBALS['HTTP_RAW_POST_DATA'];
+        $data = isset($GLOBALS['HTTP_RAW_POST_DATA']) ? $GLOBALS['HTTP_RAW_POST_DATA']:'';
+        Log::write($data,"info");
+        if(empty($data)){
+            echo '';
+            exit;
+        }
         $p = xml_parser_create();
         xml_parse_into_struct($p, $data, $vals, $index);
         xml_parser_free($p);
+        Log::write($vals,"info");
 
-        $to_user = $vals[2]['value'];
+        $to_user = $vals[1]['value'] ;
         $from_user = $vals[3]['value'];
-        $time = $vals[4]['value'];
-        $type = $vals[5]['value'];
-        $content = $vals[6]['value'];
-        $msgid = $vals[7]['value'];
+        $time = $vals[5]['value'];
+        $type = $vals[7]['value'];
+        $content = $vals[9]['value'];
+        $msgid = $vals[11]['value'];
         $message = new Message();
         $message->to_user = $to_user;
         $message->from_user = $from_user;
@@ -50,6 +67,13 @@ class Index
         $message->type = $type;
         $message->content = $content;
         $message->msgid = $msgid;
-        $message->save();
+        if($message->save()){
+            echo "success";   //需要回复信息给微信服务器，否则会出现该微信公众号无法提供服务，请稍后再试
+            exit;
+        }else{
+
         }
+
+        }
+
 }
